@@ -32,19 +32,28 @@ func TestNewFailure(test *testing.T) {
 			hasError := (err != nil)
 			if hasError != tc.expectError {
 				t.Fatalf("NewFailure(%q) error = %v, expectError %v", tc.input, err, tc.expectError)
+				return
+			}
+
+			// Если мы ждали ошибку и она действительно вернулась, выходим из подтеста
+			if tc.expectError {
+				return
 			}
 
 			// Если ошибки нет, проверяем результат
 			if actual.Message != tc.input {
 				t.Errorf("NewFailure(%q) = %v, expected %v", tc.input, actual, tc.input)
+				return
 			}
 
 			if actual.CorrelationID != id {
 				t.Errorf("NewFailure(%q) CorrelationID = %v, expected %v", tc.input, actual.CorrelationID, id)
+				return
 			}
 
 			if actual.Code != code {
 				t.Errorf("NewFailure(%q) Code = %v, expected %v", tc.input, actual.Code, code)
+				return
 			}
 		})
 	}
