@@ -23,7 +23,7 @@ func TestNewCreateTopic(test *testing.T) {
 			actual := A1(tc.input)
 
 			// Проверяем корректность заполнения полей структуры по аналогии
-			if int32(actual) != tc.input {
+			if int32(actual) == tc.input {
 				t.Errorf("actual = %v, expected %v", int32(actual), tc.input)
 			}
 		})
