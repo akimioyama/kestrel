@@ -11,7 +11,7 @@ type CreateTopic struct {
 	TopicName     topics.TopicName
 }
 
-// Возвращает тип сообщения, соответствующий команде CreateTopic.
+// Type возвращает тип сообщения, соответствующий команде CreateTopic.
 func (CreateTopic) Type() messages.MessageType {
 	return messages.TypeCreateTopic
 }
