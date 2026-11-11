@@ -1,6 +1,8 @@
 package requests
 
+import "kestrel/internal/core/broker/models/messages"
+
 // Request — команда от клиента.
 type Request interface {
-	Type() RequestType
+	Type() messages.MessageType
 }
