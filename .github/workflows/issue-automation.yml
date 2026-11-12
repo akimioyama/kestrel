@@ -1,0 +1,186 @@
+name: Issue automation
+
+# Branch naming: feature/<project>-<issue number>, e.g. feature/kestrel-12
+#  - first push        -> branch is linked to issue #12 (Development), status -> In Progress
+#  - next pushes       -> status -> In Progress only if it was empty / To Do
+#  - PR opened/reopened -> "Closes #12" added to PR body, status -> In review
+#  - PR merged         -> issue closed by GitHub, board's built-in workflow moves it to Done
+
+on:
+  push:
+    branches: ['feature/**']
+  pull_request:
+    types: [opened, reopened]
+
+concurrency:
+  group: issue-automation-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync-issue:
+    # skip the push event that is fired when a branch is deleted
+    if: github.event_name == 'pull_request' || github.event.deleted == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const isPush = context.eventName === 'push';
+            const pullRequest = context.payload.pull_request;
+            const branch = isPush ? context.ref.replace('refs/heads/', '') : pullRequest.head.ref;
+
+            const branchMatch = branch.match(/^feature\/.+-(\d+)$/);
+            if (!branchMatch) {
+              core.info(`Branch "${branch}" does not match feature/<project>-<number>, nothing to do`);
+              return;
+            }
+            const issueNumber = Number(branchMatch[1]);
+
+            let issueData;
+            try {
+              issueData = await github.graphql(`
+                query($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    id
+                    issue(number: $number) {
+                      id
+                      state
+                      linkedBranches(first: 50) { nodes { ref { name } } }
+                      projectItems(first: 20) {
+                        nodes {
+                          id
+                          project {
+                            id
+                            title
+                            field(name: "Status") {
+                              ... on ProjectV2SingleSelectField { id options { id name } }
+                            }
+                          }
+                          fieldValueByName(name: "Status") {
+                            ... on ProjectV2ItemFieldSingleSelectValue { name }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }`, { owner, repo, number: issueNumber });
+            } catch (error) {
+              core.warning(`Issue #${issueNumber} not found: ${error.message}`);
+              return;
+            }
+
+            const repositoryId = issueData.repository.id;
+            const issue = issueData.repository.issue;
+            if (!issue) {
+              core.warning(`Issue #${issueNumber} not found`);
+              return;
+            }
+            if (issue.state !== 'OPEN') {
+              core.info(`Issue #${issueNumber} is closed, nothing to do`);
+              return;
+            }
+
+            async function setStatus(targetStatus, shouldChangeFrom) {
+              if (issue.projectItems.nodes.length === 0) {
+                core.warning(`Issue #${issueNumber} is not on any project board`);
+              }
+              for (const projectItem of issue.projectItems.nodes) {
+                const project = projectItem.project;
+                const statusField = project.field;
+                const targetOption = statusField?.options?.find(
+                  option => option.name.toLowerCase() === targetStatus.toLowerCase());
+                if (!targetOption) {
+                  core.warning(`Project "${project.title}" has no Status option "${targetStatus}"`);
+                  continue;
+                }
+                const currentStatus = projectItem.fieldValueByName?.name ?? '';
+                if (!shouldChangeFrom(currentStatus.toLowerCase())) {
+                  core.info(`Project "${project.title}": status "${currentStatus}" left as is`);
+                  continue;
+                }
+                await github.graphql(`
+                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                    updateProjectV2ItemFieldValue(input: {
+                      projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+                      value: { singleSelectOptionId: $optionId }
+                    }) { projectV2Item { id } }
+                  }`,
+                  { projectId: project.id, itemId: projectItem.id, fieldId: statusField.id, optionId: targetOption.id });
+                core.info(`Project "${project.title}": "${currentStatus}" -> "${targetOption.name}"`);
+              }
+            }
+
+            // The API cannot link an already existing branch to an issue,
+            // so the branch is deleted and immediately re-created as a linked branch on the same commit.
+            async function linkBranchToIssue() {
+              const alreadyLinked = issue.linkedBranches.nodes.some(linkedBranch => linkedBranch.ref?.name === branch);
+              if (alreadyLinked) {
+                core.info(`Branch "${branch}" is already linked to issue #${issueNumber}`);
+                return;
+              }
+
+              const { data: openPullRequests } = await github.rest.pulls.list({
+                owner, repo, head: `${owner}:${branch}`, state: 'open' });
+              if (openPullRequests.length > 0) {
+                core.info(`Branch "${branch}" already has an open PR, not re-creating it`);
+                return;
+              }
+
+              const { data: branchRef } = await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` });
+              const commitSha = branchRef.object.sha;
+
+              await github.rest.git.deleteRef({ owner, repo, ref: `heads/${branch}` });
+
+              let isLinked = false;
+              try {
+                const result = await github.graphql(`
+                  mutation($issueId: ID!, $repositoryId: ID!, $oid: GitObjectID!, $name: String!) {
+                    createLinkedBranch(input: { issueId: $issueId, repositoryId: $repositoryId, oid: $oid, name: $name }) {
+                      linkedBranch { id }
+                    }
+                  }`,
+                  { issueId: issue.id, repositoryId, oid: commitSha, name: branch });
+                isLinked = Boolean(result.createLinkedBranch?.linkedBranch);
+              } catch (error) {
+                core.warning(`createLinkedBranch failed: ${error.message}`);
+              }
+
+              if (isLinked) {
+                core.info(`Branch "${branch}" linked to issue #${issueNumber} at ${commitSha}`);
+                return;
+              }
+
+              // Linking failed: put the branch back exactly where it was
+              try {
+                await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${branch}`, sha: commitSha });
+                core.warning(`Could not link "${branch}" to issue #${issueNumber}; branch restored at ${commitSha}`);
+              } catch (error) {
+                if (error.status !== 422) throw error; // 422 = branch already exists again
+              }
+            }
+
+            if (isPush) {
+              await linkBranchToIssue();
+              await setStatus('In Progress', currentStatus => currentStatus === '' || currentStatus === 'to do');
+              return;
+            }
+
+            // Pull request opened / reopened
+            const closingKeyword = new RegExp(`\\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\\s+#${issueNumber}\\b`, 'i');
+            const pullRequestBody = pullRequest.body ?? '';
+            if (!closingKeyword.test(pullRequestBody)) {
+              const closesLine = `Closes #${issueNumber}`;
+              await github.rest.pulls.update({
+                owner, repo, pull_number: pullRequest.number,
+                body: pullRequestBody ? `${pullRequestBody}\n\n${closesLine}` : closesLine });
+              core.info(`Added "${closesLine}" to PR #${pullRequest.number}`);
+            }
+            if (pullRequest.base.ref !== context.payload.repository.default_branch) {
+              core.warning(`PR targets "${pullRequest.base.ref}", not the default branch: "Closes #${issueNumber}" will not link or close the issue`);
+            }
+            await setStatus('In review', currentStatus => currentStatus !== 'done' && currentStatus !== 'in review');
