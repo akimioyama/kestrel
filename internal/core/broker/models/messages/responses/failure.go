@@ -1,7 +1,6 @@
 package responses
 
 import (
-	"fmt"
 	"kestrel/internal/core/broker/models/messages"
 	"strings"
 )
@@ -15,22 +14,18 @@ type Failure struct {
 }
 
 // NewFailure создаёт неудачный ответ.
-func NewFailure(correlationID messages.CorrelationID, code ErrorCode, message string) (Failure, error) {
-
-	if message == "" {
-		return Failure{}, fmt.Errorf("message cannot be empty")
-	}
-
+// Паникует, если message пустое или состоит только из пробелов:
+// сообщение всегда задаётся в коде, поэтому пустое значение — ошибка программиста.
+func NewFailure(correlationID messages.CorrelationID, code ErrorCode, message string) Failure {
 	if strings.TrimSpace(message) == "" {
-		return Failure{}, fmt.Errorf("message cannot be whitespace only")
+		panic("responses.NewFailure: message cannot be empty or whitespace only")
 	}
 
 	return Failure{
-			CorrelationID: correlationID,
-			Code:          code,
-			Message:       message,
-		},
-		nil
+		CorrelationID: correlationID,
+		Code:          code,
+		Message:       message,
+	}
 }
 
 func (Failure) isResponse() {}
