@@ -1,6 +1,6 @@
 name: Issue automation
 
-# Branch naming: feature/<project>-<issue number>, e.g. feature/kestrel-12
+# Branch naming: feature/<project>-<issue number> or bugfix/<project>-<issue number>, e.g. feature/kestrel-12
 #  - first push        -> branch is linked to issue #12 (Development), status -> In Progress
 #  - next pushes       -> status -> In Progress only if it was empty / To Do
 #  - PR opened/reopened -> "Closes #12" added to PR body, status -> In review
@@ -8,7 +8,7 @@ name: Issue automation
 
 on:
   push:
-    branches: ['feature/**']
+    branches: ['feature/**', 'bugfix/**']
   pull_request:
     types: [opened, reopened]
 
@@ -34,12 +34,12 @@ jobs:
             const pullRequest = context.payload.pull_request;
             const branch = isPush ? context.ref.replace('refs/heads/', '') : pullRequest.head.ref;
 
-            const branchMatch = branch.match(/^feature\/.+-(\d+)$/);
+            const branchMatch = branch.match(/^(feature|bugfix)\/.+-(\d+)$/);
             if (!branchMatch) {
-              core.info(`Branch "${branch}" does not match feature/<project>-<number>, nothing to do`);
+              core.info(`Branch "${branch}" does not match feature|bugfix/<project>-<number>, nothing to do`);
               return;
             }
-            const issueNumber = Number(branchMatch[1]);
+            const issueNumber = Number(branchMatch[2]);
 
             let issueData;
             try {
