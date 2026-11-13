@@ -8,7 +8,7 @@ import (
 type failureTestCase struct {
 	testName    string
 	input       string
-	expectError bool
+	expectPanic bool
 }
 
 func TestNewFailure(test *testing.T) {
@@ -19,6 +19,7 @@ func TestNewFailure(test *testing.T) {
 		// Невалидные сообщения
 		{"Empty string", "", true},
 		{"Only whitespace", "     ", true},
+		{"Tabs and newlines", "\t\n", true},
 	}
 
 	for _, tc := range testCases {
@@ -26,34 +27,30 @@ func TestNewFailure(test *testing.T) {
 			id := messages.CorrelationID(1)
 			code := CodeInternal
 
-			actual, err := NewFailure(id, code, tc.input)
+			// Паника прерывает подтест, поэтому ловим её в defer:
+			// он выполнится и при панике, и при обычном завершении.
+			defer func() {
+				r := recover()
+				panicked := r != nil
 
-			// Проверяем, совпадает ли факт наличия ошибки с ожиданием
-			hasError := (err != nil)
-			if hasError != tc.expectError {
-				t.Fatalf("NewFailure(%q) error = %v, expectError %v", tc.input, err, tc.expectError)
-				return
-			}
+				if panicked != tc.expectPanic {
+					t.Errorf("NewFailure(%q) panicked = %v (%v), expectPanic %v", tc.input, panicked, r, tc.expectPanic)
+				}
+			}()
 
-			// Если мы ждали ошибку и она действительно вернулась, выходим из подтеста
-			if tc.expectError {
-				return
-			}
+			actual := NewFailure(id, code, tc.input)
 
-			// Если ошибки нет, проверяем результат
+			// Сюда доходим, только если паники не было — проверяем результат
 			if actual.Message != tc.input {
-				t.Errorf("NewFailure(%q) = %v, expected %v", tc.input, actual, tc.input)
-				return
+				t.Errorf("NewFailure(%q) Message = %q, expected %q", tc.input, actual.Message, tc.input)
 			}
 
 			if actual.CorrelationID != id {
 				t.Errorf("NewFailure(%q) CorrelationID = %v, expected %v", tc.input, actual.CorrelationID, id)
-				return
 			}
 
 			if actual.Code != code {
 				t.Errorf("NewFailure(%q) Code = %v, expected %v", tc.input, actual.Code, code)
-				return
 			}
 		})
 	}
