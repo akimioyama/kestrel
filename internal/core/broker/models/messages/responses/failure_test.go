@@ -24,11 +24,14 @@ func TestNewFailure(test *testing.T) {
 
 	for _, tc := range testCases {
 		test.Run(tc.testName, func(t *testing.T) {
+			// Arrange
 			id := messages.CorrelationID(1)
 			code := CodeInternal
 
+			// Assert (паника)
 			// Паника прерывает подтест, поэтому ловим её в defer:
 			// он выполнится и при панике, и при обычном завершении.
+			// Зарегистрировать defer нужно до Act, а сработает он после.
 			defer func() {
 				r := recover()
 				panicked := r != nil
@@ -38,8 +41,10 @@ func TestNewFailure(test *testing.T) {
 				}
 			}()
 
+			// Act
 			actual := NewFailure(id, code, tc.input)
 
+			// Assert
 			// Сюда доходим, только если паники не было — проверяем результат
 			if actual.Message != tc.input {
 				t.Errorf("NewFailure(%q) Message = %q, expected %q", tc.input, actual.Message, tc.input)

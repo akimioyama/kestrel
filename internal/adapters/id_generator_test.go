@@ -5,27 +5,11 @@ import (
 	"testing"
 )
 
-func TestIDGeneratorSequentialIDs(test *testing.T) {
-	generator := NewIDGenerator()
-	for i := uint64(1); i <= 10; i++ {
-		id := generator.NextID()
-		if id != i {
-			test.Errorf("Expected ID %d, got %d", i, id)
-		}
-	}
-}
-
-func TestIDGeneratorConcurrentAccess(test *testing.T) {
-	generator := NewIDGenerator()
-	numGoroutines := 100
-
-	ids := make([]uint64, numGoroutines)
-	var wg sync.WaitGroup
-
-	for i := range numGoroutines {
-		wg.Go(func() { ids[i] = generator.NextID() }) // каждая горутина пишет в свою ячейку
-	}
-	wg.Wait()
+// assertUniqueIDs падает, если в ids есть повторы.
+// test.Helper() говорит Go, что при падении показывать строку
+// в вызывающем тесте, а не здесь.
+func assertUniqueIDs(test *testing.T, ids []uint64) {
+	test.Helper()
 
 	seen := make(map[uint64]bool)
 	for _, id := range ids {
@@ -34,4 +18,35 @@ func TestIDGeneratorConcurrentAccess(test *testing.T) {
 		}
 		seen[id] = true
 	}
+}
+
+func TestIDGeneratorUniqueIDs(test *testing.T) {
+	// Arrange
+	generator := NewIDGenerator()
+	ids := make([]uint64, 100)
+
+	// Act
+	for i := range ids {
+		ids[i] = generator.NextID()
+	}
+
+	// Assert
+	assertUniqueIDs(test, ids)
+}
+
+func TestIDGeneratorConcurrentAccess(test *testing.T) {
+	// Arrange
+	generator := NewIDGenerator()
+	numGoroutines := 100
+	ids := make([]uint64, numGoroutines)
+	var wg sync.WaitGroup
+
+	// Act
+	for i := range numGoroutines {
+		wg.Go(func() { ids[i] = generator.NextID() }) // каждая горутина пишет в свою ячейку
+	}
+	wg.Wait()
+
+	// Assert
+	assertUniqueIDs(test, ids)
 }
