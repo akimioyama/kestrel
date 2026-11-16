@@ -6,7 +6,7 @@ import (
 	"kestrel/internal/core/broker/models/topics"
 )
 
-// ErrTopicAlreadyExists возвращает Add, если топик с таким именем уже есть.
+// ErrTopicAlreadyExists ошибка о том, что топик с таким именем уже есть.
 var ErrTopicAlreadyExists = errors.New("topic already exists")
 
 // TopicRepository хранит топики.
