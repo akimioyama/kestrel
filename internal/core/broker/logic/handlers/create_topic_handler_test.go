@@ -78,7 +78,6 @@ func TestCreateTopicHandlerHandle(test *testing.T) {
 	for _, tc := range testCases {
 		test.Run(tc.testName, func(t *testing.T) {
 			// Arrange
-			// Моки создаём в каждом подтесте заново, иначе added копился бы между кейсами
 			idGenerator := mockIDGenerator{id: 42}
 			repository := &mockRepository{err: tc.repositoryErr}
 			handler := NewCreateTopicHandler(idGenerator, repository)
