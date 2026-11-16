@@ -3,8 +3,6 @@ package handlers
 import (
 	"errors"
 	"fmt"
-	"kestrel/internal/adapters"
-	"kestrel/internal/adapters/memory"
 	"kestrel/internal/core/broker/models/messages"
 	"kestrel/internal/core/broker/models/messages/requests"
 	"kestrel/internal/core/broker/models/messages/responses"
@@ -13,75 +11,94 @@ import (
 	"testing"
 )
 
-type mockRepository struct {
-	err error // что вернёт Add
+// mockIDGenerator всегда возвращает один и тот же ID.
+type mockIDGenerator struct {
+	id uint64 // что вернёт NextID
 }
 
-func (s mockRepository) Add(topics.Topic) error {
+func (s mockIDGenerator) NextID() uint64 {
+	return s.id
+}
+
+// mockRepository возвращает заданную ошибку и запоминает, что ему передали.
+type mockRepository struct {
+	err   error          // что вернёт Add
+	added []topics.Topic // что передали в Add
+}
+
+func (s *mockRepository) Add(topic topics.Topic) error {
+	s.added = append(s.added, topic)
 	return s.err
 }
 
-func TestCreateTopicHandlerCanHandle(test *testing.T) {
-	idGenerator := adapters.NewIDGenerator()
-	repository := memory.NewTopicRepository()
+// Проверка на этапе компиляции: если интерфейсы портов изменятся,
+// тесты перестанут собираться, и мы сразу увидим, какой мок поправить.
+var (
+	_ ports.IDGenerator     = mockIDGenerator{}
+	_ ports.TopicRepository = (*mockRepository)(nil)
+)
 
-	handler := NewCreateTopicHandler(idGenerator, repository)
-
-	request := requests.CreateTopic{
-		CorrelationID: messages.CorrelationID(1),
-		TopicName:     "test-topic",
-	}
-	expected := responses.CreateTopicOK{CorrelationID: request.CorrelationID}
-
-	response := handler.Handle(request)
-
-	if response != expected {
-		test.Fatalf("got %+v, expected %+v", response, expected)
-	}
+type createTopicHandlerTestCase struct {
+	testName         string
+	repositoryErr    error              // что вернёт репозиторий
+	expectedResponse responses.Response // что должен ответить хендлер
 }
 
-func TestCreateTopicHandlerCanNotHandleIfTopicExists(test *testing.T) {
-	idGenerator := adapters.NewIDGenerator()
-	repository := mockRepository{err: ports.ErrTopicAlreadyExists}
-
-	handler := NewCreateTopicHandler(idGenerator, repository)
-
+func TestCreateTopicHandlerHandle(test *testing.T) {
 	request := requests.CreateTopic{
 		CorrelationID: messages.CorrelationID(1),
 		TopicName:     "test-topic",
 	}
-	expected := responses.NewFailure(
-		request.CorrelationID,
-		responses.CodeTopicExists,
-		fmt.Sprintf("failed to add topic: %v", ports.ErrTopicAlreadyExists))
+	internalErr := errors.New("some error")
 
-	response := handler.Handle(request)
-
-	if response != expected {
-		test.Fatalf("got %+v, expected %+v", response, expected)
+	testCases := []createTopicHandlerTestCase{
+		{
+			"Topic created",
+			nil,
+			responses.CreateTopicOK{CorrelationID: request.CorrelationID},
+		},
+		{
+			"Topic already exists",
+			ports.ErrTopicAlreadyExists,
+			responses.NewFailure(
+				request.CorrelationID,
+				responses.CodeTopicExists,
+				fmt.Sprintf("failed to add topic: %v", ports.ErrTopicAlreadyExists)),
+		},
+		{
+			"Repository internal error",
+			internalErr,
+			responses.NewFailure(
+				request.CorrelationID,
+				responses.CodeInternal,
+				fmt.Sprintf("failed to add topic: %v", internalErr)),
+		},
 	}
-}
 
-func TestCreateTopicHandlerCanNotHandleIfGetInternalError(test *testing.T) {
-	idGenerator := adapters.NewIDGenerator()
+	for _, tc := range testCases {
+		test.Run(tc.testName, func(t *testing.T) {
+			// Arrange
+			// Моки создаём в каждом подтесте заново, иначе added копился бы между кейсами
+			idGenerator := mockIDGenerator{id: 42}
+			repository := &mockRepository{err: tc.repositoryErr}
+			handler := NewCreateTopicHandler(idGenerator, repository)
+			expectedTopic := topics.Topic{ID: topics.TopicID(42), Name: request.TopicName}
 
-	repositoryErr := errors.New("some error")
-	repository := mockRepository{err: repositoryErr}
+			// Act
+			response := handler.Handle(request)
 
-	handler := NewCreateTopicHandler(idGenerator, repository)
+			// Assert
+			if response != tc.expectedResponse {
+				t.Fatalf("got %+v, expected %+v", response, tc.expectedResponse)
+			}
 
-	request := requests.CreateTopic{
-		CorrelationID: messages.CorrelationID(1),
-		TopicName:     "test-topic",
-	}
-	expected := responses.NewFailure(
-		request.CorrelationID,
-		responses.CodeInternal,
-		fmt.Sprintf("failed to add topic: %v", repositoryErr))
+			if len(repository.added) != 1 {
+				t.Fatalf("Add called %d times, expected 1", len(repository.added))
+			}
 
-	response := handler.Handle(request)
-
-	if response != expected {
-		test.Fatalf("got %+v, expected %+v", response, expected)
+			if repository.added[0] != expectedTopic {
+				t.Errorf("added %+v, expected %+v", repository.added[0], expectedTopic)
+			}
+		})
 	}
 }
