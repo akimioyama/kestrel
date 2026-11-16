@@ -11,7 +11,7 @@ import (
 // TopicRepository — репозиторий топиков в памяти.
 type TopicRepository struct {
 	topics map[topics.TopicName]topics.Topic
-	mu     sync.Mutex
+	mu     sync.RWMutex
 }
 
 // NewTopicRepository создаёт новый репозиторий топиков в памяти.
@@ -32,5 +32,4 @@ func (repository *TopicRepository) Add(topic topics.Topic) error {
 
 	repository.topics[topic.Name] = topic
 	return nil
-
 }
