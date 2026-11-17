@@ -33,8 +33,10 @@ func TestNewTopicName(test *testing.T) {
 
 	for _, tc := range testCases {
 		test.Run(tc.testName, func(t *testing.T) {
+			// Act
 			actual, err := NewTopicName(tc.input)
 
+			// Assert
 			// Проверяем, совпадает ли факт наличия ошибки с ожиданием
 			hasError := (err != nil)
 			if hasError != tc.expectError {
@@ -58,10 +60,15 @@ func TestNewTopicName(test *testing.T) {
 }
 
 func TestTopicNameString(test *testing.T) {
+	// Arrange
 	topicName := TopicName("orders")
 	expected := "orders"
 
-	if actual := topicName.String(); actual != expected {
+	// Act
+	actual := topicName.String()
+
+	// Assert
+	if actual != expected {
 		test.Errorf("TopicName.String() = %v, expected %v", actual, expected)
 	}
 }
