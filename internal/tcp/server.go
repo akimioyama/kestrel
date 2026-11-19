@@ -1,14 +1,21 @@
 package tcp
 
 import (
+	"io"
 	"kestrel/internal/tcp/ports"
+	"kestrel/internal/tcp/transport"
 	"net"
 )
 
 type Server struct {
-	listener       net.Listener
-	router         ports.Router
-	sessionFactory ports.SessionFactory
+	listener net.Listener
+	decoder  transport.Decoder
+	encoder  transport.Encoder
+	handler  ports.Handler
+}
+
+func NewServer(listener net.Listener, decoder transport.Decoder, encoder transport.Encoder, handler ports.Handler) Server {
+	return Server{listener: listener, decoder: decoder, encoder: encoder, handler: handler}
 }
 
 func (server *Server) Run() error {
@@ -18,16 +25,16 @@ func (server *Server) Run() error {
 			return err
 		}
 
-		go server.RunSession(conn)
+		go server.runSession(conn)
 	}
 }
 
 func (server *Server) Stop() error {
-	return server.listener.Close()
+	return server.listener.Close() // закрыть все коннекшены???
 }
 
-func (server *Server) RunSession(conn net.Conn) {
+func (server *Server) runSession(conn io.ReadWriteCloser) {
 	defer conn.Close()
-	session := server.sessionFactory.Session(conn, server.router)
+	session := NewSession(server.decoder, server.encoder, server.handler, conn)
 	session.Run()
 }

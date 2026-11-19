@@ -5,6 +5,7 @@ import (
 	"kestrel/internal/core/broker/models/messages/responses"
 )
 
-type Router interface {
-	Route(request requests.Request) responses.Response
+// Handler обрабатывает запросы.
+type Handler interface {
+	Handle(request requests.Request) responses.Response
 }
