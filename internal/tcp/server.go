@@ -7,6 +7,7 @@ import (
 	"net"
 )
 
+// Server - обработчик подключений.
 type Server struct {
 	listener net.Listener
 	decoder  transport.Decoder
@@ -14,10 +15,12 @@ type Server struct {
 	handler  ports.Handler
 }
 
+// NewServer создаёт новый NewServer.
 func NewServer(listener net.Listener, decoder transport.Decoder, encoder transport.Encoder, handler ports.Handler) Server {
 	return Server{listener: listener, decoder: decoder, encoder: encoder, handler: handler}
 }
 
+// Run слушает и обрабатывает подключения.
 func (server *Server) Run() error {
 	for {
 		conn, err := server.listener.Accept()
@@ -29,6 +32,7 @@ func (server *Server) Run() error {
 	}
 }
 
+// Stop останавливает работу Server.
 func (server *Server) Stop() error {
 	return server.listener.Close() // закрыть все коннекшены???
 }

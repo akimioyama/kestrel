@@ -6,18 +6,21 @@ import (
 	"kestrel/internal/tcp/transport"
 )
 
-type SessionImp struct {
+// Session - сессия работы с подключением.
+type Session struct {
 	decoder    transport.Decoder
 	encoder    transport.Encoder
 	handler    ports.Handler
 	readWriter io.ReadWriter
 }
 
-func NewSession(decoder transport.Decoder, encoder transport.Encoder, handler ports.Handler, readWriter io.ReadWriter) SessionImp {
-	return SessionImp{decoder: decoder, encoder: encoder, handler: handler, readWriter: readWriter}
+// NewSession создаёт новую Session.
+func NewSession(decoder transport.Decoder, encoder transport.Encoder, handler ports.Handler, readWriter io.ReadWriter) *Session {
+	return &Session{decoder: decoder, encoder: encoder, handler: handler, readWriter: readWriter}
 }
 
-func (session *SessionImp) Run() error {
+// Run запускает сессию.
+func (session *Session) Run() error {
 	for {
 		reqest, err := session.decoder.Decode(session.readWriter)
 
@@ -30,7 +33,7 @@ func (session *SessionImp) Run() error {
 		encodedResponce, err := session.encoder.Encode(response)
 
 		if err != nil {
-			return nil
+			return err
 		}
 
 		_, err = session.readWriter.Write(encodedResponce)

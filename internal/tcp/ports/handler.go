@@ -5,7 +5,8 @@ import (
 	"kestrel/internal/core/broker/models/messages/responses"
 )
 
-// Handler обрабатывает запросы.
+// Handler - обрабатчик запросов.
 type Handler interface {
+	// Handle обрабатывает запросы.
 	Handle(request requests.Request) responses.Response
 }

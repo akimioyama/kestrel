@@ -7,13 +7,14 @@ import (
 	"kestrel/internal/core/broker/models/messages/responses"
 )
 
-// Router используется для перенаправления запроса обработчикам
+// Router - верхнеуровневый обработчик запросов.
 type Router struct {
 	handlers map[messages.MessageType]Handler
 }
 
-func NewRouter(handlers map[messages.MessageType]Handler) Router {
-	return Router{handlers: handlers}
+// NewRouter создаёт новый Router
+func NewRouter(handlers map[messages.MessageType]Handler) *Router {
+	return &Router{handlers: handlers}
 }
 
 // Handle перенаправляет запрос нужному обработчику
