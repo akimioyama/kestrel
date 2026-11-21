@@ -8,11 +8,12 @@ import (
 	"sync"
 )
 
-type SessionId uint64
+// SessionID - идентификатор сессии.
+type SessionID uint64
 
 // Session - сессия работы с подключением.
 type Session struct {
-	id                   SessionId
+	id                   SessionID
 	decoder              transport.Decoder
 	encoder              transport.Encoder
 	handler              ports.Handler
@@ -24,7 +25,7 @@ type Session struct {
 }
 
 // NewSession создаёт новую Session.
-func NewSession(id SessionId, decoder transport.Decoder, encoder transport.Encoder, handler ports.Handler, readWriteCloser io.ReadWriteCloser) *Session {
+func NewSession(id SessionID, decoder transport.Decoder, encoder transport.Encoder, handler ports.Handler, readWriteCloser io.ReadWriteCloser) *Session {
 	return &Session{
 		id:                   id,
 		decoder:              decoder,
@@ -36,8 +37,8 @@ func NewSession(id SessionId, decoder transport.Decoder, encoder transport.Encod
 	}
 }
 
-// Id предоставляет id сессии
-func (session *Session) Id() SessionId { return session.id }
+// ID предоставляет id сессии
+func (session *Session) ID() SessionID { return session.id }
 
 // Write пишет ответы.
 func (session *Session) Write(response responses.Response) { // [todo] нужен ли тут какой-то возврат ошибки? а то тут и паника может быть после закрытия канала. Ловить и конвертить в ошику?
@@ -59,7 +60,7 @@ func (session *Session) SubscribeOnClosure(subscriber string, ch chan *Session) 
 	go session.notify(ch)
 }
 
-// SubscribeOnClosure удаляет подписчика на закрытие сессии.
+// UnsubscribeOnClosure удаляет подписчика на закрытие сессии.
 func (session *Session) UnsubscribeOnClosure(subscriber string) { // будет использоваться при удалении топиков, например.
 	if !session.isClosed {
 		session.closeMutex.Lock()

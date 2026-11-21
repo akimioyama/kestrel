@@ -14,9 +14,9 @@ type Server struct {
 	decoder            transport.Decoder
 	encoder            transport.Encoder
 	handler            ports.Handler
-	sessionIdGenerator ports.IDGenerator
+	sessionIDGenerator ports.IDGenerator
 	sessionsClosures   chan *Session
-	sessions           map[SessionId]*Session
+	sessions           map[SessionID]*Session
 	muForSessions      sync.Mutex
 	isStopped          bool
 }
@@ -55,7 +55,7 @@ func (server *Server) Stop() error {
 }
 
 func (server *Server) runSession(conn io.ReadWriteCloser) {
-	sessionId := SessionId(server.sessionIdGenerator.NextID())
+	sessionID := SessionID(server.sessionIDGenerator.NextID())
 
 	server.muForSessions.Lock()
 	defer server.muForSessions.Unlock()
@@ -64,8 +64,8 @@ func (server *Server) runSession(conn io.ReadWriteCloser) {
 		return
 	}
 
-	session := NewSession(sessionId, server.decoder, server.encoder, server.handler, conn)
+	session := NewSession(sessionID, server.decoder, server.encoder, server.handler, conn)
 	session.Run()
-	server.sessions[sessionId] = session
+	server.sessions[sessionID] = session
 	session.SubscribeOnClosure("server", server.sessionsClosures) // [todo] или надо ссылку на канал передавать?
 }
