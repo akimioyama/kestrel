@@ -113,7 +113,6 @@ func (session *Session) runReader() {
 		}
 
 		response := session.handler.Handle(reqest)
-
 		session.responces <- response
 	}
 }
@@ -121,7 +120,6 @@ func (session *Session) runReader() {
 func (session *Session) runWriter() {
 	for {
 		response := <-session.responces
-
 		encodedResponce, err := session.encoder.Encode(response)
 
 		if err != nil {

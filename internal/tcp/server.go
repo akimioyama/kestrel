@@ -51,7 +51,7 @@ func (server *Server) Stop() error {
 		go session.Close()
 	}
 
-	return err
+	return err // [todo] норм ли? прост при ошибке всё равно надо все соединения закрыть будто хз. Поэтому берётся ошибка из самого начала вообще
 }
 
 func (server *Server) runSession(conn io.ReadWriteCloser) {
