@@ -5,14 +5,20 @@ import (
 	"kestrel/internal/tcp/ports"
 	"kestrel/internal/tcp/transport"
 	"net"
+	"sync"
 )
 
 // Server - обработчик подключений.
 type Server struct {
-	listener net.Listener
-	decoder  transport.Decoder
-	encoder  transport.Encoder
-	handler  ports.Handler
+	listener           net.Listener
+	decoder            transport.Decoder
+	encoder            transport.Encoder
+	handler            ports.Handler
+	sessionIdGenerator ports.IDGenerator
+	sessionsClosures   chan *Session
+	sessions           map[SessionId]*Session
+	muForSessions      sync.Mutex
+	isStopped          bool
 }
 
 // NewServer создаёт новый NewServer.
@@ -34,11 +40,32 @@ func (server *Server) Run() error {
 
 // Stop останавливает работу Server.
 func (server *Server) Stop() error {
-	return server.listener.Close() // закрыть все коннекшены???
+	err := server.listener.Close()
+
+	server.muForSessions.Lock()
+	defer server.muForSessions.Unlock()
+
+	server.isStopped = true
+
+	for _, session := range server.sessions {
+		go session.Close()
+	}
+
+	return err
 }
 
 func (server *Server) runSession(conn io.ReadWriteCloser) {
-	defer conn.Close()
-	session := NewSession(server.decoder, server.encoder, server.handler, conn)
+	sessionId := SessionId(server.sessionIdGenerator.NextID())
+
+	server.muForSessions.Lock()
+	defer server.muForSessions.Unlock()
+
+	if server.isStopped {
+		return
+	}
+
+	session := NewSession(sessionId, server.decoder, server.encoder, server.handler, conn)
 	session.Run()
+	server.sessions[sessionId] = session
+	session.SubscribeOnClosure("server", server.sessionsClosures) // [todo] или надо ссылку на канал передавать?
 }
