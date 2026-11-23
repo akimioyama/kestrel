@@ -13,27 +13,27 @@ type SessionID uint64
 
 // Session - сессия работы с подключением.
 type Session struct {
-	id                   SessionID
-	decoder              transport.Decoder
-	encoder              transport.Encoder
-	handler              ports.Handler
-	readWriteCloser      io.ReadWriteCloser
-	responces            chan responses.Response
-	subscribersOnClosure map[string]chan *Session
-	isClosed             bool
-	closeMutex           sync.Mutex
+	id                  SessionID
+	decoder             transport.Decoder
+	encoder             transport.Encoder
+	handler             ports.Handler
+	readWriteCloser     io.ReadWriteCloser
+	responces           chan responses.Response
+	subscriberOnClosure chan<- SessionID
+	isClosed            bool
+	closeMutex          sync.Mutex
 }
 
 // NewSession создаёт новую Session.
 func NewSession(id SessionID, decoder transport.Decoder, encoder transport.Encoder, handler ports.Handler, readWriteCloser io.ReadWriteCloser) *Session {
 	return &Session{
-		id:                   id,
-		decoder:              decoder,
-		encoder:              encoder,
-		handler:              handler,
-		readWriteCloser:      readWriteCloser,
-		responces:            make(chan responses.Response), // [todo] один медленный tcp будет блочить другие? при подписке несколько топиков ситуация ещё больше ухудшится
-		subscribersOnClosure: make(map[string]chan *Session),
+		id:                  id,
+		decoder:             decoder,
+		encoder:             encoder,
+		handler:             handler,
+		readWriteCloser:     readWriteCloser,
+		responces:           make(chan responses.Response, 20), // [todo] сделать конфигурируемым параметром? что делать при переполнении очереди из-за медленной рассылки?
+		subscriberOnClosure: nil,
 	}
 }
 
@@ -41,38 +41,25 @@ func NewSession(id SessionID, decoder transport.Decoder, encoder transport.Encod
 func (session *Session) ID() SessionID { return session.id }
 
 // Write пишет ответы.
-func (session *Session) Write(response responses.Response) { // [todo] нужен ли тут какой-то возврат ошибки? а то тут и паника может быть после закрытия канала. Ловить и конвертить в ошику?
-	session.responces <- response
+func (session *Session) Write(response responses.Response) {
+	select {
+	case session.responces <- response: // [todo] что делать при переполнении буфера? пока сделал закрытие
+		return
+	default:
+		go session.Close()
+	}
 }
 
 // SubscribeOnClosure сохраняет подписчика на закрытие сессии.
-func (session *Session) SubscribeOnClosure(subscriber string, ch chan *Session) { // [todo] может быть тут вместо строковых имён можно добавлять айдишники топиков, но что тогда писать серверу?
+func (session *Session) SubscribeOnClosure(ch chan<- SessionID) {
+	session.closeMutex.Lock()
+	defer session.closeMutex.Unlock()
+
 	if !session.isClosed {
-		session.closeMutex.Lock()
-		defer session.closeMutex.Unlock()
-
-		if !session.isClosed {
-			session.subscribersOnClosure[subscriber] = ch
-			return
-		}
+		session.subscriberOnClosure = ch
+		return
 	}
-
-	go session.notify(ch)
-}
-
-// UnsubscribeOnClosure удаляет подписчика на закрытие сессии.
-func (session *Session) UnsubscribeOnClosure(subscriber string) { // будет использоваться при удалении топиков, например.
-	if !session.isClosed {
-		session.closeMutex.Lock()
-		defer session.closeMutex.Unlock()
-
-		if !session.isClosed {
-			if _, ok := session.subscribersOnClosure[subscriber]; ok {
-				delete(session.subscribersOnClosure, subscriber)
-				return
-			}
-		}
-	}
+	go func() { ch <- session.id }()
 }
 
 // Close закрывает сессию.
@@ -86,9 +73,7 @@ func (session *Session) Close() {
 			session.isClosed = true
 			close(session.responces)
 
-			for _, ch := range session.subscribersOnClosure {
-				go session.notify(ch) // [todo] go для защиты от закрытых каналов и взаимоблокировок в таких местах
-			}
+			go func() { session.subscriberOnClosure <- session.id }()
 		}
 	}
 }
@@ -97,10 +82,6 @@ func (session *Session) Close() {
 func (session *Session) Run() {
 	go session.runReader()
 	go session.runWriter()
-}
-
-func (session *Session) notify(ch chan *Session) {
-	ch <- session
 }
 
 func (session *Session) runReader() {
