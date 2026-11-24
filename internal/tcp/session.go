@@ -20,8 +20,7 @@ type Session struct {
 	readWriteCloser     io.ReadWriteCloser
 	responces           chan responses.Response
 	subscriberOnClosure chan<- SessionID
-	isClosed            bool
-	closeMutex          sync.Mutex
+	closureExecutor     sync.Once
 }
 
 // NewSession создаёт новую Session.
@@ -50,38 +49,23 @@ func (session *Session) Write(response responses.Response) {
 	}
 }
 
-// SubscribeOnClosure сохраняет подписчика на закрытие сессии.
-func (session *Session) SubscribeOnClosure(ch chan<- SessionID) {
-	session.closeMutex.Lock()
-	defer session.closeMutex.Unlock()
-
-	if !session.isClosed {
-		session.subscriberOnClosure = ch
-		return
-	}
-	go func() { ch <- session.id }()
-}
-
 // Close закрывает сессию.
 func (session *Session) Close() {
-	if !session.isClosed {
-		session.closeMutex.Lock()
-		defer session.closeMutex.Unlock()
-
-		if !session.isClosed {
+	session.closureExecutor.Do(
+		func() {
 			session.readWriteCloser.Close()
-			session.isClosed = true
 			close(session.responces)
 
 			go func() { session.subscriberOnClosure <- session.id }()
-		}
-	}
+		})
 }
 
 // Run запускает сессию.
-func (session *Session) Run() {
+func (session *Session) Run(ch chan<- SessionID) {
+	session.subscriberOnClosure = ch
 	go session.runReader()
 	go session.runWriter()
+
 }
 
 func (session *Session) runReader() {

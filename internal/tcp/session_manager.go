@@ -1,10 +1,17 @@
 package tcp
 
 import (
+	"errors"
 	"kestrel/internal/core/broker/models/messages/responses"
 	"kestrel/internal/core/broker/models/topics"
 	"sync"
 )
+
+// ErrManagerClosed о том, что менеджер сессий уже закрыт.
+var ErrManagerClosed = errors.New("Session manager closed")
+
+// ErrSessionNotFound о том, что сессия не найдена.
+var ErrSessionNotFound = errors.New("Session not found")
 
 // SessionManager - управляющий сессиями.
 type SessionManager struct {
@@ -35,36 +42,40 @@ func (manager *SessionManager) AddSession(session *Session) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 
-	if manager.isClosed {
-		session.Close() // case: сессия могла запускаться во время закрытия менеджера.
-		return
-	}
-
 	manager.sessions[session.ID()] = session
-	session.SubscribeOnClosure(manager.sessionCloses)
-	//[todo] можно:
-	// 1) заменить на Run, но нет гарантий, что Run не будет вызван дважды. с SubscribeOnClosure та же проблема
-	// 2.а) сессия может тут создаваться. Но тогда слишком много всего в текущей структуре будет, а она уже не простая
-	// 2.б) фабрику? но это оверинжинеринг и не нужно
+	session.Run(manager.sessionCloses)
 }
 
 // SubscribeSessionOnTopic добавляет подписку сессии на топик.
-func (manager *SessionManager) SubscribeSessionOnTopic(sessionID SessionID, topicID topics.TopicID) { // [todo] сделать снос топиков ещё отдельным методом?
+func (manager *SessionManager) SubscribeSessionOnTopic(sessionID SessionID, topicID topics.TopicID) error { // [todo] сделать снос топиков ещё отдельным методом?
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 
 	if manager.isClosed {
-		panic("Session meneger closed.")
+		return ErrManagerClosed
 	}
 
 	session, ok := manager.sessions[sessionID]
 
 	if !ok {
-		panic("Session not found.") // case: пока отрабатывал хендлер сессия разорвалась
+		return ErrSessionNotFound // case: пока отрабатывал хендлер сессия разорвалась
 	}
 
-	manager.sessionSubscriptions[sessionID][topicID] = true
-	manager.topicSubscribers[topicID][sessionID] = session
+	sessionSubscriptions, ok := manager.sessionSubscriptions[sessionID]
+	if !ok {
+		sessionSubscriptions = make(map[topics.TopicID]bool)
+		manager.sessionSubscriptions[sessionID] = sessionSubscriptions
+	}
+	sessionSubscriptions[topicID] = true
+
+	topicSubscribers, ok := manager.topicSubscribers[topicID]
+	if !ok {
+		topicSubscribers = make(map[SessionID]*Session)
+		manager.topicSubscribers[topicID] = topicSubscribers
+	}
+	topicSubscribers[sessionID] = session
+
+	return nil
 }
 
 // Delivery доставляет сообщения топика всем подписанным сессиям.
@@ -82,12 +93,10 @@ func (manager *SessionManager) CloseAll() {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 
+	manager.isClosed = true
+
 	for _, session := range manager.sessions {
 		session.Close()
-	}
-
-	if manager.isClosed {
-		manager.isClosed = true
 	}
 }
 

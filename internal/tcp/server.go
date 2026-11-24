@@ -14,12 +14,26 @@ type Server struct {
 	encoder            transport.Encoder
 	handler            ports.Handler
 	sessionIDGenerator ports.IDGenerator
-	sessionManager     SessionManager
+	sessionManager     *SessionManager
 }
 
 // NewServer создаёт новый NewServer.
-func NewServer(listener net.Listener, decoder transport.Decoder, encoder transport.Encoder, handler ports.Handler) Server {
-	return Server{listener: listener, decoder: decoder, encoder: encoder, handler: handler}
+func NewServer(
+	listener net.Listener,
+	decoder transport.Decoder,
+	encoder transport.Encoder,
+	handler ports.Handler,
+	sessionIDGenerator ports.IDGenerator,
+	sessionManager *SessionManager,
+) Server {
+	return Server{
+		listener:           listener,
+		decoder:            decoder,
+		encoder:            encoder,
+		handler:            handler,
+		sessionIDGenerator: sessionIDGenerator,
+		sessionManager:     sessionManager,
+	}
 }
 
 // Run слушает и обрабатывает подключения.
@@ -44,6 +58,5 @@ func (server *Server) Stop() error {
 func (server *Server) runSession(conn io.ReadWriteCloser) {
 	sessionID := SessionID(server.sessionIDGenerator.NextID())
 	session := NewSession(sessionID, server.decoder, server.encoder, server.handler, conn)
-	session.Run()
 	server.sessionManager.AddSession(session)
 }
