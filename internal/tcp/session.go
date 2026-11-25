@@ -39,6 +39,7 @@ func NewSession(id SessionID, decoder transport.Decoder, encoder transport.Encod
 // ID предоставляет id сессии
 func (session *Session) ID() SessionID { return session.id }
 
+// Done возвращает канал, который закрывается при закрытии сессии.
 func (session *Session) Done() <-chan struct{} { return session.done }
 
 // Write пишет ответы.
