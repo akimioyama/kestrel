@@ -18,7 +18,6 @@ type SessionManager struct {
 	sessions             map[SessionID]*Session
 	topicSubscribers     map[topics.TopicID]map[SessionID]*Session
 	sessionSubscriptions map[SessionID]map[topics.TopicID]bool
-	sessionCloses        chan SessionID
 	isClosed             bool
 	mu                   sync.RWMutex
 }
@@ -29,12 +28,7 @@ func NewSessionManager() *SessionManager {
 		sessions:             make(map[SessionID]*Session),
 		topicSubscribers:     make(map[topics.TopicID]map[SessionID]*Session),
 		sessionSubscriptions: make(map[SessionID]map[topics.TopicID]bool),
-		sessionCloses:        make(chan SessionID)}
-}
-
-// Init инициализирует объект.
-func (manager *SessionManager) Init() {
-	go manager.runCleaner()
+	}
 }
 
 // AddSession добавляет сессию.
@@ -43,7 +37,9 @@ func (manager *SessionManager) AddSession(session *Session) {
 	defer manager.mu.Unlock()
 
 	manager.sessions[session.ID()] = session
-	session.Run(manager.sessionCloses)
+	go manager.runCleaner(session)
+
+	session.Run()
 }
 
 // SubscribeSessionOnTopic добавляет подписку сессии на топик.
@@ -100,16 +96,18 @@ func (manager *SessionManager) CloseAll() {
 	}
 }
 
-func (manager *SessionManager) runCleaner() {
+func (manager *SessionManager) runCleaner(session *Session) {
 	for {
-		session := <-manager.sessionCloses
+		<-session.Done()
+		sessionID := session.ID()
+
 		manager.mu.Lock()
 
-		delete(manager.sessions, session)
-		for topic := range manager.sessionSubscriptions[session] {
-			delete(manager.topicSubscribers[topic], session)
+		delete(manager.sessions, sessionID)
+		for topic := range manager.sessionSubscriptions[sessionID] {
+			delete(manager.topicSubscribers[topic], sessionID)
 		}
-		delete(manager.sessionSubscriptions, session)
+		delete(manager.sessionSubscriptions, sessionID)
 
 		manager.mu.Unlock()
 	}
