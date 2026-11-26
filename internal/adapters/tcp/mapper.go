@@ -20,9 +20,19 @@ func (m *Mapper) ToDomain(frame Frame) (requests.Request, error) {
 			return nil, errors.New("")
 		}
 
+		if frame.Header.Topic == nil {
+			return nil, errors.New("")
+		}
+
+		name, err := topics.NewTopicName(*frame.Header.Topic)
+
+		if err != nil {
+			return nil, err
+		}
+
 		return requests.CreateTopic{
 			CorrelationID: messages.CorrelationID(*frame.Header.CorrelationID),
-			TopicName:     topics.TopicName(*frame.Header.Topic),
+			TopicName:     name,
 		}, nil
 	default:
 		return nil, nil

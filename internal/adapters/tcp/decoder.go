@@ -11,20 +11,9 @@ type Decoder struct {
 	reader io.Reader
 }
 
-const (
-	fixedHeaderSize  = 8 // Magic + Version + Type + Length
-	magicCode        = 0xBEEF
-	versionCode      = 1
-	minLength        = 4
-	maxLength        = 10 << 20
-	maxHeaderLength  = 64 << 10
-	headerLengthSize = 4 // сколько байт занимает само поле HeaderLength в начале тела
-	fieldPrefixSize  = 3 // FieldID (1 байт) + FieldLength (2 байта)
-)
-
 // Ошибки, которые возвращает Decoder при разборе фрейма.
 var (
-	ErrInvalidMagic        = errors.New("invalid magic")
+	ErrInvalidMagic         = errors.New("invalid magic")
 	ErrInvalidVersion       = errors.New("invalid version")
 	ErrLengthTooSmall       = errors.New("length too small")
 	ErrLengthTooBig         = errors.New("length too big")
@@ -162,7 +151,7 @@ func parseField(header *Header, fieldID uint8, value []byte) error {
 		header.Topic = &topic
 
 	case fieldCorrelationID:
-		if len(value) != 8 {
+		if len(value) != correlationIDSize {
 			return ErrInvalidFieldSize
 		}
 		correlationID := binary.BigEndian.Uint64(value)

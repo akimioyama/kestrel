@@ -16,13 +16,3 @@ type Header struct {
 	ErrorMessage  *string
 	MessageID     *uint64
 }
-
-// FieldID полей Header.
-const (
-	fieldTopic         uint8 = 0x01
-	fieldCorrelationID uint8 = 0x02
-	fieldKey           uint8 = 0x03
-	fieldErrorCode     uint8 = 0x04
-	fieldErrorMessage  uint8 = 0x05
-	fieldMessageID     uint8 = 0x06
-)
