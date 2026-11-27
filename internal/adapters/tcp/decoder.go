@@ -162,7 +162,7 @@ func parseField(header *Header, fieldID uint8, value []byte) error {
 
 	default:
 		// Неизвестный FieldID по спеке пропускаем.
-		// ErrorCode, ErrorMessage и MessageID тоже сюда: их шлёт только сервер.
+		// ErrorCode, ErrorMessage и MessageID тоже сюда - их шлёт только сервер.
 	}
 
 	return nil

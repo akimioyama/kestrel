@@ -5,31 +5,25 @@ import (
 	"errors"
 )
 
+// Encoder собирает фреймы протокола в байты.
+type Encoder struct{}
+
 // Ошибки, которые возвращает Encoder при сборке фрейма.
 var (
 	ErrIncompleteErrorFields = errors.New("error code and error message must be set together")
 )
 
-// Encoder собирает фреймы протокола в байты.
-type Encoder struct{}
-
 // Encode собирает фрейм целиком:
 // [ фиксированный заголовок | HeaderLength | блок полей Header | Payload ].
 func (encoder *Encoder) Encode(frame Frame) ([]byte, error) {
-
 	var result []byte
 
 	headerArray, err := encodeHeaderArray(frame.Header)
-
 	if err != nil {
-
+		return nil, err
 	}
 
-	header, err := encodeHeader(frame, headerArray)
-
-	if err != nil {
-
-	}
+	header := encodeHeader(frame, headerArray)
 
 	result = append(result, header...)
 	result = binary.BigEndian.AppendUint32(result, uint32(len(headerArray)))
@@ -91,7 +85,7 @@ func encodeHeaderArray(header Header) ([]byte, error) {
 
 // encodeHeader собирает 8 байт фиксированного заголовка: Magic, Version, Type, Length.
 // Length — длина всего тела: HeaderLength + блок полей Header + Payload.
-func encodeHeader(frame Frame, headerArray []byte) ([]byte, error) {
+func encodeHeader(frame Frame, headerArray []byte) []byte {
 	buffer := make([]byte, fixedHeaderSize)
 
 	binary.BigEndian.PutUint16(buffer[0:2], magicCode)
@@ -102,5 +96,5 @@ func encodeHeader(frame Frame, headerArray []byte) ([]byte, error) {
 	length := uint32(headerLengthSize + len(headerArray) + len(frame.Payload))
 	binary.BigEndian.PutUint32(buffer[4:8], length)
 
-	return buffer, nil
+	return buffer
 }
