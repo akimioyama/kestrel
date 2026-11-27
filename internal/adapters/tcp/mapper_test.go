@@ -122,7 +122,7 @@ func TestToTransport(test *testing.T) {
 		// Failure
 		// Валидный маппинг
 		{
-			"Can map failure to transport failure respons",
+			"Can map failure to transport respons",
 			responses.Failure{
 				CorrelationID: messages.CorrelationID(123),
 				Code:          responses.CodeInternal,
@@ -140,7 +140,7 @@ func TestToTransport(test *testing.T) {
 		// CreateTopicOK
 		// Валидный маппинг
 		{
-			"Can map failure to transport create topic ok respons",
+			"Can map create topic ok to transport respons",
 			responses.CreateTopicOK{
 				CorrelationID: messages.CorrelationID(123),
 			},
